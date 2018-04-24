@@ -30,23 +30,24 @@ GPIO.setup(pinEcho, GPIO.IN)  # Echo
 
 # Variables
 Distance = 0
+Distances = [0, 0, 0]
 
 # How many times to turn the pin on and off each second
 Frequency = 20
 
 # How long the pin stays on each cycle, as a percent (here, it's 40%)
-DutyCycle = 40
+DutyCycle = 40.0
 
 # Last Duty Cycle used to allow smooth transitions in speed
-LastDutyCycle = 0
+LastDutyCycle = 0.0
 SpeedSteps = 3
 
 # Adj balances the forward drive
-Adj = 0.1
+Adj = 0.06
 
 # Time to turn 90 degrees
 # TurnTimeRef = 0.7
-TurnTimes = [0, 8.0, 1.20, 0.75, 0.5, 0.40, 0.38, 0.37, 0.35, 0.335, 0.3]
+TurnTimes = [0.0, 8.0, 1.20, 0.75, 0.5, 0.40, 0.38, 0.37, 0.35, 0.335, 0.3]
 TurnTime = TurnTimes[4]
 
 # Setting the duty cycle to 0 means the motors will not turn
@@ -59,8 +60,13 @@ Last = "S"
 StopFlag = False
 
 # Obsticle avoidance mode
-Mode = "Simple"
+Modes = ["Simple", "Choose2", "Choose3"]
+Mode = Modes[0]
 Choice = 0
+
+# Circle Sizes
+Small = 0.4
+Large = 0.6
 
 # Set the GPIO Pin mode
 GPIO.setup(pinMotorAForwards, GPIO.OUT)
@@ -107,6 +113,14 @@ def Backwards(Power):
     pwmMotorBBackwards.ChangeDutyCycle(Power)
 
 
+# Turn both motors backwards
+def Backup(Power, distance):
+    while distance <= 40:
+        Backwards(Power)
+        distance = Measure()
+    StopMotors()
+
+
 # Turn Right
 def Right(Power):
     pwmMotorAForwards.ChangeDutyCycle(Stop)
@@ -121,6 +135,14 @@ def Left(Power):
     pwmMotorABackwards.ChangeDutyCycle(Stop)
     pwmMotorBForwards.ChangeDutyCycle(Stop)
     pwmMotorBBackwards.ChangeDutyCycle(Power)
+
+
+# Turn in a circle
+def Circle(Power, Size):
+    pwmMotorAForwards.ChangeDutyCycle(Power * Size)
+    pwmMotorABackwards.ChangeDutyCycle(Stop)
+    pwmMotorBForwards.ChangeDutyCycle(Power)
+    pwmMotorBBackwards.ChangeDutyCycle(Stop)
 
 
 # Accelerate Forwards
@@ -163,6 +185,10 @@ def Continue():
         AccelerateForwards(DutyCycle, LastDutyCycle)
     if (Last in("bB")):
         AccelerateBackwards(DutyCycle, LastDutyCycle)
+    if (Last in("c")):
+        Circle(DutyCycle, Small)
+    if (Last in("C")):
+        Circle(DutyCycle, Large)
 
 
 def Measure():
@@ -170,7 +196,7 @@ def Measure():
         GPIO.output(pinTrigger, False)
 
         # Allow module to settle
-        time.sleep(0.5)
+        time.sleep(0.25)
 
         # Send 10us pulse to trigger
         GPIO.output(pinTrigger, True)
@@ -205,7 +231,7 @@ def Measure():
         # That was the distance there and back so halve the value
         distance = distance / 2
 
-        print("Distance: %.1f cm" % distance)
+        print("\rDistance: %.1f cm" % distance)
 
         return distance
 
@@ -221,44 +247,71 @@ class DistanceControl (threading.Thread):
     def run(dctl):
 
         global Distance, StopFlag, DutyCycle, OldDutyCycle, TurnTime
-        global Mode, Last, Adj, Distances, Choice
+        global Mode, Last, Adj, Choice
+        global Distances, Large, Small
 
         while StopFlag is False:
 
             Distance = Measure()
+            # In a big open space a zero distance is returned
+            if (Distance == 0):
+                Distance = 1000
+                print("A long way to go")
             if (Distance <= 40):
-                if (Last != "S"):
-                    if (Mode == "Simple"):
-                        print("Right")
-                        Right(DutyCycle)
-                        time.sleep(TurnTime)
-                        Continue()
-
-                    if (Mode == "Choose"):
-                        Right(DutyCycle)
-                        time.sleep(TurnTime)
-                        StopMotors()
-                        Distances2 = Measure
-                        print(Distances2)
-                        Right(DutyCycle)
-                        time.sleep(TurnTime)
-                        StopMotors()
-                        Distances1 = Measure
-                        print(Distances1)
-                        Right(DutyCycle)
-                        time.sleep(TurnTime)
-                        StopMotors()
-                        Distances0 = Measure
-                        print(Distances0)
-                        Choice = max(Distances0, Distances1, Distances2)
-                        print("Choice", Choice)
-                        if (Choice == Distances2):
-                            Left(DutyCycle)
-                            time.sleep(TurnTime*2)
-                        elif (Choice == Distances1):
-                            Left(DutyCycle)
+                if (Distance >= 1):
+                    if (Last != "S"):
+                        # Go back a bit
+                        Backup(20, Distance)
+                        if (Mode == "Simple"):
+                            print("%.1f cm so go Right" % Distance)
+                            Right(DutyCycle)
                             time.sleep(TurnTime)
-                        Continue()
+                            Continue()
+
+                        elif (Mode == "Choose2"):
+                            print("Choosing left or right")
+                            Right(DutyCycle)
+                            time.sleep(TurnTime)
+                            StopMotors()
+                            Distances[2] = Measure()
+                            Right(DutyCycle)
+                            time.sleep(TurnTime)
+                            StopMotors()
+#                            Distances[1] = Measure()
+                            Right(DutyCycle)
+                            time.sleep(TurnTime)
+                            StopMotors()
+                            Distances[0] = Measure()
+                            Choice = max(Distances[0], Distances[2])
+                            print("Choice: %.1f cm" % Choice)
+                            if (Choice == Distances[2]):
+                                Left(DutyCycle)
+                                time.sleep(TurnTime*2)
+                            Continue()
+
+                        elif (Mode == "Choose3"):
+                            print("Choosing left, right or turn round")
+                            Right(DutyCycle)
+                            time.sleep(TurnTime)
+                            StopMotors()
+                            Distances[2] = Measure()
+                            Right(DutyCycle)
+                            time.sleep(TurnTime)
+                            StopMotors()
+                            Distances[1] = Measure()
+                            Right(DutyCycle)
+                            time.sleep(TurnTime)
+                            StopMotors()
+                            Distances[0] = Measure()
+                            Choice = max(Distances)
+                            print("Choice: %.1f cm" % Choice)
+                            if (Choice == Distances[2]):
+                                Left(DutyCycle)
+                                time.sleep(TurnTime*2)
+                            elif (Choice == Distances[1]):
+                                Left(DutyCycle)
+                                time.sleep(TurnTime)
+                            Continue()
 
             time.sleep(0.1)
 
@@ -277,7 +330,8 @@ class KeyControl (threading.Thread):
 
         button_delay = 0.2
         global DutyCycle, TurnTime, TurnTimes, StopFlag
-        global Last, Adj, LastDutyCycle, SpeedSteps, Mode
+        global Last, Adj, LastDutyCycle, SpeedSteps, Mode, Modes
+        global Large, Small
 
         while True:
             char = getch()
@@ -294,7 +348,7 @@ class KeyControl (threading.Thread):
                 print("Forward")
                 AccelerateForwards(DutyCycle, LastDutyCycle)
                 Last = char
-                time.sleep(1)
+#                time.sleep(1)
 
             elif (char in("Ll")):
                 print("Left")
@@ -305,7 +359,7 @@ class KeyControl (threading.Thread):
             elif (char in("kK")):
                 print("Little Left")
                 Left(DutyCycle)
-                time.sleep(TurnTime / 5)
+                time.sleep(TurnTime / 3)
                 if (Last == "S"):
                     StopMotors()
                 Continue()
@@ -319,7 +373,7 @@ class KeyControl (threading.Thread):
             elif (char in("eE")):
                 print("Little Right")
                 Right(DutyCycle)
-                time.sleep(TurnTime / 5)
+                time.sleep(TurnTime / 3)
                 if (Last == "S"):
                     StopMotors()
                 Continue()
@@ -328,7 +382,7 @@ class KeyControl (threading.Thread):
                 print("Back")
                 AccelerateBackwards(DutyCycle, LastDutyCycle)
                 Last = char
-                time.sleep(1)
+#                time.sleep(1)
 #                StopMotors()
 
             elif (char in("Ss")):
@@ -337,11 +391,24 @@ class KeyControl (threading.Thread):
                 Last = "S"
                 LastDutyCycle = 0
 
+            elif (char == "C"):
+                print("Big Circle")
+                Circle(DutyCycle, Large)
+                Last = char
+
+            elif (char == "c"):
+                print("Small Circle")
+                Circle(DutyCycle, Small)
+                Last = char
+
             elif(char in("Mm")):
                 if (Mode == "Simple"):
-                    Mode = "Choose"
+                    Mode = "Choose2"
                     print(Mode)
-                elif (Mode == "Choose"):
+                elif (Mode == "Choose2"):
+                    Mode = "Choose3"
+                    print(Mode)
+                elif (Mode == "Choose3"):
                     Mode = "Simple"
                     print(Mode)
 
