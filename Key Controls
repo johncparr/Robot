@@ -1,0 +1,26 @@
+This is a list of the key Controls:
+
+	F or f = Go forwards
+	B or b = Go backwards
+	L or l = Go left
+	K or k = Go a little left (K is next to L on the keyboard)
+	R or r = Go Right
+	E or e = Go a little left (E is next to R on the keyboard)
+	S or s = Stop
+	C      = Go forwards on a large circle
+	c      = Go forwards on a small circle
+	M or m = Choose obstacle avoidance mode
+		 Default = turn right 90 degrees (simple mode)
+		     first key press  = change to Choose2 mode
+		     second key press = change to Choose3 mode
+		     third key press  = change back to simple mode
+		     Further key presses repeat this pattern
+		 Choose2 mode = turn left or right 90 degrees
+		 Choose3 mode = turn left, right or 180 degrees
+		 Choose modes go for the direction with the longest
+		 distance to an obstacle
+	1234567890 - sets the speed
+		   - 1 = 10% of full power
+		   - 2 = 20% of full power
+		   etc...
+		   - 0 = 100% of full power
