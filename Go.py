@@ -1,6 +1,6 @@
 # CamJam EduKit 3 - Robotics
 # Program by John Parr based on the CamJam worksheets and online resources
-# Top
+
 
 # Import the Library's
 import RPi.GPIO as GPIO
@@ -121,8 +121,10 @@ def Forwards(Power):
     pwmMotorABackwards.ChangeDutyCycle(Stop)
     pwmMotorBForwards.ChangeDutyCycle(Power * (1 - AdjLeft) * (1 - Adj))
     pwmMotorBBackwards.ChangeDutyCycle(Stop)
-    # print("\rRight: %5.1f, Left: %5.1f" % (Power * (1 - AdjRight), Power * (1 - AdjLeft)))
-    # print("\rRight: %5.1f, Left: %5.1f" % (AdjRight, AdjLeft))
+    a = 1 - AdjRight
+    b = 1 - AdjLeft
+    print("\rRight: %5.1f, Left: %5.1f" % (Power * a, Power * b)
+    print("\rRight: %5.1f, Left: %5.1f" % (AdjRight, AdjLeft))
 
 
 # Turn both motors backwards
@@ -137,7 +139,7 @@ def Backwards(Power):
 def Backup(Power, distance):
     while distance <= 40:
         Backwards(Power)
-        distance = Measure()
+        distance=Measure()
     StopMotors()
 
 
@@ -167,7 +169,7 @@ def Circle(Power, Size):
 
 # Accelerate Forwards
 def AccelerateForwards(NewPower, OldPower):
-    Step = (NewPower-OldPower)/SpeedSteps
+    Step=(NewPower-OldPower)/SpeedSteps
     # print(OldPower+Step)
     Forwards(OldPower+Step)
     time.sleep(0.25)
@@ -180,7 +182,7 @@ def AccelerateForwards(NewPower, OldPower):
 
 # Accelerate Backwards
 def AccelerateBackwards(NewPower, OldPower):
-    Step = (NewPower-OldPower)/SpeedSteps
+    Step=(NewPower-OldPower)/SpeedSteps
     Backwards(OldPower+Step)
     time.sleep(0.25)
     Backwards(NewPower-Step)
@@ -190,70 +192,70 @@ def AccelerateBackwards(NewPower, OldPower):
 
 # get control input
 def getch():
-    fd = sys.stdin.fileno()
-    old_settings = termios.tcgetattr(fd)
+    fd=sys.stdin.fileno()
+    old_settings=termios.tcgetattr(fd)
     try:
         tty.setraw(sys.stdin.fileno())
-        ch = sys.stdin.read(1)
+        ch=sys.stdin.read(1)
     finally:
         termios.tcsetattr(fd, termios.TCSADRAIN, old_settings)
     return ch
 
 
 def Continue():
-    if (Last in("fF")):
+    if (Last in ("fF")):
         AccelerateForwards(DutyCycle, LastDutyCycle)
-    if (Last in("bB")):
+    if (Last in ("bB")):
         AccelerateBackwards(DutyCycle, LastDutyCycle)
-    if (Last in("c")):
+    if (Last in ("c")):
         Circle(DutyCycle, Small)
-    if (Last in("C")):
+    if (Last in ("C")):
         Circle(DutyCycle, Large)
 
 
 def Measure():
-        # Set trigger to False (Low)
-        GPIO.output(pinTrigger, False)
+    # Set trigger to False (Low)
+    GPIO.output(pinTrigger, False)
 
-        # Allow module to settle
-        time.sleep(0.25)
+    # Allow module to settle
+    time.sleep(0.25)
 
-        # Send 10us pulse to trigger
-        GPIO.output(pinTrigger, True)
-        time.sleep(0.00001)
-        GPIO.output(pinTrigger, False)
+    # Send 10us pulse to trigger
+    GPIO.output(pinTrigger, True)
+    time.sleep(0.00001)
+    GPIO.output(pinTrigger, False)
 
-        # Start the timer
-        StartTime = time.time()
+    # Start the timer
+    StartTime=time.time()
 
-        # The start time is reset until the Echo pin is taken high (==1)
-        while GPIO.input(pinEcho) == 0:
-            StartTime = time.time()
+    # The start time is reset until the Echo pin is taken high (==1)
+    while GPIO.input(pinEcho) == 0:
+        StartTime=time.time()
 
-        # Stop when the Echo pin is no longer high - the end time
-        while GPIO.input(pinEcho) == 1:
-            StopTime = time.time()
-        # If the sensor is too close to an object, the Pi cannot
-        # see the echo quickly enough, so it has to detect that
-        # problem and say what has happened
-            if StopTime-StartTime >= 0.04:
-                # print("Hold on there! You're too close for me to see.")
-                StopTime = StartTime
-                break
+    # Stop when the Echo pin is no longer high - the end time
+    while GPIO.input(pinEcho) == 1:
+        StopTime=time.time()
+    # If the sensor is too close to an object, the Pi cannot
+    # see the echo quickly enough, so it has to detect that
+    # problem and say what has happened
+        if StopTime-StartTime >= 0.04:
+            # print("Hold on there! You're too close for me to see.")
+            StopTime=StartTime
+            break
 
-        # Calculate pulse length
-        ElapsedTime = StopTime - StartTime
+    # Calculate pulse length
+    ElapsedTime=StopTime - StartTime
 
-        # Distance pulse travelled in that time is
-        # time multiplied by the speed of sound (cm/s)
-        distance = ElapsedTime * 34326
+    # Distance pulse travelled in that time is
+    # time multiplied by the speed of sound (cm/s)
+    distance=ElapsedTime * 34326
 
-        # That was the distance there and back so halve the value
-        distance = distance / 2
+    # That was the distance there and back so halve the value
+    distance=distance / 2
 
-        # print("\rDistance: %.1f cm" % distance)
+    # print("\rDistance: %.1f cm" % distance)
 
-        return distance
+    return distance
 
 
 def TwosComptoInt(N):
@@ -269,37 +271,37 @@ def Heading():
 
     # Read registers 3 to 8 for the XYZ data
     for x in range(3, 9):
-        Regvalue[x] = bus.read_byte_data(address, x)
+        Regvalue[x]=bus.read_byte_data(address, x)
         # print(x, Regvalue[x])
 
     # join the two 8 bit numbers to make a 16 bit
-    X = (Regvalue[3] << 8) + Regvalue[4]
-    Z = (Regvalue[5] << 8) + Regvalue[6]
-    Y = (Regvalue[7] << 8) + Regvalue[8]
+    X=(Regvalue[3] << 8) + Regvalue[4]
+    Z=(Regvalue[5] << 8) + Regvalue[6]
+    Y=(Regvalue[7] << 8) + Regvalue[8]
 
     # Convert the twos compliment format to a signed integer
-    X = TwosComptoInt(X)
-    Y = TwosComptoInt(Y)
-    Z = TwosComptoInt(Z)
+    X=TwosComptoInt(X)
+    Y=TwosComptoInt(Y)
+    Z=TwosComptoInt(Z)
 
-    #ATan = math.atan(X/Y)
-    #print("\rXYZ", X, Y, Z, X/Y, ATan)
+    # ATan = math.atan(X/Y)
+    # print("\rXYZ", X, Y, Z, X/Y, ATan)
 
     # Calculate the heading in range 0 to 360
     if (Y > 0):
-        Heading360 = 90 - (math.atan(X/Y) * 180 / math.pi)
+        Heading360=90 - (math.atan(X/Y) * 180 / math.pi)
 
     if (Y < 0):
-        Heading360 = 270 - (math.atan(X/Y) * 180 / math.pi)
+        Heading360=270 - (math.atan(X/Y) * 180 / math.pi)
 
     if (Y == 0):
         if (X < 0):
-            Heading360 = 180
+            Heading360=180
         if (X > 0):
-            Heading360 = 0
+            Heading360=0
     # Calculate signed heading
     # Heading = math.atan(X/Y) * 180 / math.pi
-    Heading = Heading360
+    Heading=Heading360
     # print("\rHeading ", Heading, Heading360)
 
     return Heading
@@ -309,9 +311,9 @@ def Heading():
 class DistanceControl (threading.Thread):
     def __init__(dctl, threadID, name, counter):
         threading.Thread.__init__(dctl)
-        dctl.threadID = threadID
-        dctl.name = name
-        dctl.counter = counter
+        dctl.threadID=threadID
+        dctl.name=name
+        dctl.counter=counter
 
     def run(dctl):
 
@@ -321,16 +323,16 @@ class DistanceControl (threading.Thread):
 
         while StopFlag is False:
 
-            Distance = Measure()
+            Distance=Measure()
             # In a big open space a zero distance is returned
             if (Distance == 0):
-                Distance = 1000
+                Distance=1000
                 # print("\rA long way to go")
             if (Distance <= 40):
                 if (Distance >= 1):
                     if (Last != "S"):
                         # Stop Compass navigation
-                        char = " "
+                        char=" "
                         # Go back a bit
                         Backup(20, Distance)
                         if (Mode == "Simple"):
@@ -344,7 +346,7 @@ class DistanceControl (threading.Thread):
                             Right(DutyCycle)
                             time.sleep(TurnTime)
                             StopMotors()
-                            Distances[2] = Measure()
+                            Distances[2]=Measure()
                             Right(DutyCycle)
                             time.sleep(TurnTime)
                             StopMotors()
@@ -352,8 +354,8 @@ class DistanceControl (threading.Thread):
                             Right(DutyCycle)
                             time.sleep(TurnTime)
                             StopMotors()
-                            Distances[0] = Measure()
-                            Choice = max(Distances[0], Distances[2])
+                            Distances[0]=Measure()
+                            Choice=max(Distances[0], Distances[2])
                             # print("Choice: %.1f cm" % Choice)
                             if (Choice == Distances[2]):
                                 Left(DutyCycle)
@@ -365,16 +367,16 @@ class DistanceControl (threading.Thread):
                             Right(DutyCycle)
                             time.sleep(TurnTime)
                             StopMotors()
-                            Distances[2] = Measure()
+                            Distances[2]=Measure()
                             Right(DutyCycle)
                             time.sleep(TurnTime)
                             StopMotors()
-                            Distances[1] = Measure()
+                            Distances[1]=Measure()
                             Right(DutyCycle)
                             time.sleep(TurnTime)
                             StopMotors()
-                            Distances[0] = Measure()
-                            Choice = max(Distances)
+                            Distances[0]=Measure()
+                            Choice=max(Distances)
                             # print("Choice: %.1f cm" % Choice)
                             if (Choice == Distances[2]):
                                 Left(DutyCycle)
@@ -393,13 +395,13 @@ class DistanceControl (threading.Thread):
 class KeyControl (threading.Thread):
     def __init__(kctl, threadID, name, counter):
         threading.Thread.__init__(kctl)
-        kctl.threadID = threadID
-        kctl.name = name
-        kctl.counter = counter
+        kctl.threadID=threadID
+        kctl.name=name
+        kctl.counter=counter
 
     def run(kctl):
 
-        button_delay = 0.2
+        button_delay=0.2
         global DutyCycle, TurnTime, TurnTimes, StopFlag
         global Last, Adj, AdjLeft, AdjRight, LastDutyCycle
         global SpeedSteps, Mode, Modes
@@ -407,125 +409,125 @@ class KeyControl (threading.Thread):
         global TargetHeading, LastHeading, Running, CompassMode
 
         while True:
-            char = getch()
+            char=getch()
             # print(char)
 
-            if (char in("Pp")):
+            if (char in ("Pp")):
                 print("Exit")
-                Running = False
+                Running=False
                 StopMotors()
-                StopFlag = True
+                StopFlag=True
                 print("Exiting " + kctl.name)
                 exit(0)
 
-            if (char in("Ff")):
+            if (char in ("Ff")):
                 print("Forward")
-                TargetHeading = LastHeading
+                TargetHeading=LastHeading
                 AccelerateForwards(DutyCycle, LastDutyCycle)
-                Running = True
-                Last = char
+                Running=True
+                Last=char
 #                time.sleep(1)
 
-            elif (char in("Ll")):
+            elif (char in ("Ll")):
                 print("Left")
-                TargetHeading = LastHeading - 90
+                TargetHeading=LastHeading - 90
                 if (TargetHeading < 0):
-                    TargetHeading = TargetHeading + 360
+                    TargetHeading=TargetHeading + 360
                 if (CompassMode == False):
-                    Running = False
+                    Running=False
                     Left(DutyCycle)
                     time.sleep(TurnTime)
                     StopMotors()
 
-            elif (char in("kK")):
+            elif (char in ("kK")):
                 print("Little Left")
-                TargetHeading = LastHeading - 30
-                Running = False
+                TargetHeading=LastHeading - 30
+                Running=False
                 Left(DutyCycle)
                 time.sleep(TurnTime / 3)
                 if (Last == "S"):
                     StopMotors()
                 Continue()
-                Running = True
+                Running=True
 
-            elif (char in("Rr")):
+            elif (char in ("Rr")):
                 print("Right")
-                TargetHeading = LastHeading + 90
+                TargetHeading=LastHeading + 90
                 if (TargetHeading > 360):
-                    TargetHeading = TargetHeading - 360
+                    TargetHeading=TargetHeading - 360
                 if (CompassMode == False):
-                    Running = False
+                    Running=False
                     Right(DutyCycle)
                     time.sleep(TurnTime)
                     StopMotors()
 
-            elif (char in("eE")):
+            elif (char in ("eE")):
                 print("Little Right")
-                TargetHeading = LastHeading + 30
-                Running = False
+                TargetHeading=LastHeading + 30
+                Running=False
                 Right(DutyCycle)
                 time.sleep(TurnTime / 3)
                 if (Last == "S"):
                     StopMotors()
                 Continue()
-                Running = True
+                Running=True
 
-            elif (char in("Bb")):
+            elif (char in ("Bb")):
                 print("Back")
-                Running = False
+                Running=False
                 AccelerateBackwards(DutyCycle, LastDutyCycle)
-                Last = char
+                Last=char
 #                time.sleep(1)
 #                StopMotors()
 
-            elif (char in("Ss")):
+            elif (char in ("Ss")):
                 print("Stop")
-                TargetHeading = LastHeading
-                Running = False
+                TargetHeading=LastHeading
+                Running=False
                 StopMotors()
-                Last = "S"
-                LastDutyCycle = 0
+                Last="S"
+                LastDutyCycle=0
 
             elif (char == "C"):
                 print("Big Circle")
-                Running = False
+                Running=False
                 Circle(DutyCycle, Large)
-                Last = char
+                Last=char
 
             elif (char == "c"):
                 print("Small Circle")
-                Running = False
+                Running=False
                 Circle(DutyCycle, Small)
-                Last = char
+                Last=char
 
-            elif(char in("Mm")):
+            elif(char in ("Mm")):
                 if (Mode == "Simple"):
-                    Mode = "Choose2"
+                    Mode="Choose2"
                     print(Mode)
                 elif (Mode == "Choose2"):
-                    Mode = "Choose3"
+                    Mode="Choose3"
                     print(Mode)
                 elif (Mode == "Choose3"):
-                    Mode = "Simple"
+                    Mode="Simple"
                     print(Mode)
 
-            elif(char in("Nn")):
+            elif(char in ("Nn")):
                 if (CompassMode):
-                    CompassMode = False
+                    CompassMode=False
                     print("Compass Mode off")
                 elif (CompassMode is False):
-                    CompassMode = True
+                    CompassMode=True
                     print("Compass Mode active")
 
-            elif (char in("1234567890")):
-                LastDutyCycle = DutyCycle
+            elif (char in ("1234567890")):
+                LastDutyCycle=DutyCycle
                 if (Last == "S"):
-                    LastDutyCycle = 0
+                    LastDutyCycle=0
                 if (char == "0"):
-                    char = "10"
-                DutyCycle = 10 * int(char)
+                    char="10"
+                DutyCycle=10 * int(char)
                 # print("Power ", LastDutyCycle, " to ", DutyCycle)
-                TurnTime = TurnTimes[int(char)] * TurnAdj
+                TurnTime=TurnTimes[int(char)] * TurnAdj
                 print("Turn time", TurnTime)
 
                 Continue()
@@ -537,9 +539,9 @@ class KeyControl (threading.Thread):
 class CompassControl (threading.Thread):
     def __init__(cctl, threadID, name, counter):
         threading.Thread.__init__(cctl)
-        cctl.threadID = threadID
-        cctl.name = name
-        cctl.counter = counter
+        cctl.threadID=threadID
+        cctl.name=name
+        cctl.counter=counter
 
     def run(cctl):
 
@@ -550,42 +552,48 @@ class CompassControl (threading.Thread):
         global bus, address, MaxInt, TwosCompAdj, Regvalue
         global TargetHeading, LastHeading, Running, CompassMode
 
-        bus = smbus.SMBus(1)
-        address = 0x1E
-        bits = 16
-        MaxInt = (2**(bits-1))-1
-        TwosCompAdj = 2**bits
+        bus=smbus.SMBus(1)
+        address=0x1E
+        bits=16
+        MaxInt=(2**(bits-1))-1
+        TwosCompAdj=2**bits
 
-        Regvalue = [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
+        Regvalue=[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]
 
         # bus.write_byte_data(address, 0, 112)
 
-        TargetHeading = Heading()
+        TargetHeading=Heading()
 
         # Sets HMC5883L Compass continuous mode. (Register 2, Mode 0)
         bus.write_byte_data(address, 2, 0)
 
+        # Set a parameter to control how aggressively to correct direction
+        SteerFactor=20
+
         while StopFlag is False:
 
-            LastHeading = Heading()
-            Correction = TargetHeading - LastHeading
-            print("\rLast: %5.1f, Target %5.1f, Corr %5.1f" % (LastHeading, TargetHeading, Correction))
+            LastHeading=Heading()
+            Correction=TargetHeading - LastHeading
+            print("\rLast: %5.1f, Target %5.1f, Corr %5.1f" %
+                  (LastHeading, TargetHeading, Correction))
             if (CompassMode):
                 if(Correction > 0):
-                    AdjLeft = 0
-                    AdjRight = Correction / 20
+                    AdjLeft=0
+                    AdjRight=Correction / SteerFactor
                     if(AdjRight > 0.9):
-                        AdjRight = 0.9
+                        AdjRight=0.9
                 if(Correction < 0):
-                    AdjRight = 0
-                    AdjLeft = (0 - Correction) / 20
+                    AdjRight=0
+                    AdjLeft=(0 - Correction) / SteerFactor
                     if(AdjLeft > 0.9):
-                        AdjLeft = 0.9
+                        AdjLeft=0.9
 
-            if (char in("FfLlRrKkEe1234567890")):
+            if (char in ("FfLlRrKkEe1234567890")):
                 if (Running):
                     if (CompassMode):
-                        print("\rAdjRight: %5.3f, AdjLeft: %5.3f" % (AdjRight, AdjLeft))
+                        AR=AdjRight
+                        AL=AdjLeft
+                        print("\rAdjRight: %5.3f, AdjLeft: %5.3f" % (AR, AL))
                         Forwards(DutyCycle)
 
             time.sleep(1)
@@ -594,9 +602,9 @@ class CompassControl (threading.Thread):
 
 
 # Create Threads
-thread1 = KeyControl(1, "Key Control Thread", 1)
-thread2 = DistanceControl(2, "Distance Control Thread", 1)
-thread3 = CompassControl(3, "Compass Control Thread", 1)
+thread1=KeyControl(1, "Key Control Thread", 1)
+thread2=DistanceControl(2, "Distance Control Thread", 1)
+thread3=CompassControl(3, "Compass Control Thread", 1)
 
 # Start the Threads
 thread1.start()
