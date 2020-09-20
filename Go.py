@@ -1,6 +1,5 @@
 # CamJam EduKit 3 - Robotics
 # Program by John Parr based on the CamJam worksheets and online resources
-# Add comment
 
 # Import the Library's
 import RPi.GPIO as GPIO
@@ -47,6 +46,8 @@ SpeedSteps = 3
 
 # Adj balances the forward drive
 Adj = 0.00
+
+# AdjLeft and AdjRight are used in the compass mode to steer
 AdjLeft = 0
 AdjRight = 0
 
@@ -127,7 +128,7 @@ def Forwards(Power):
     # a = 1 - AdjRight
     # b = 1 - AdjLeft
     # print("\rRight: %5.1f, Left: %5.1f" % (Power * a, Power * b)
-    # print("\rRight: %5.1f, Left: %5.1f" % (AdjRight, AdjLeft))
+    print("\rRight: %5.1f, Left: %5.1f" % (AdjRight, AdjLeft))
 
 
 # Turn both motors backwards
@@ -310,6 +311,15 @@ def Heading():
     return Heading
 
 
+def TargetHeadingfn(Heading, Change):
+    NewHeading = Heading + Change
+    if (NewHeading < 0):
+        NewHeading += 360
+    if (NewHeading > 360):
+        NewHeading -= 360
+    return NewHeading
+
+
 # Distance Control Thread
 class DistanceControl (threading.Thread):
     def __init__(dctl, threadID, name, counter):
@@ -322,7 +332,8 @@ class DistanceControl (threading.Thread):
 
         global Distance, StopFlag, DutyCycle, OldDutyCycle, TurnTime
         global Mode, Last, Adj, AdjLeft, AdjRight, Choice
-        global Distances, Large, Small, char, Auto
+        global Distances, Large, Small, char, Auto, CompassMode
+        global TargetHeading, LastHeading
 
         while StopFlag is False:
 
@@ -340,10 +351,14 @@ class DistanceControl (threading.Thread):
                         # Go back a bit
                         Backup(20, Distance)
                         if (Mode == "Simple"):
-                            # print("%.1f cm so go Right" % Distance)
-                            Right(DutyCycle)
-                            time.sleep(TurnTime)
+                            if CompassMode:
+                                TargetHeading = TargetHeadingfn(LastHeading, -90)
+                                print('Hello', Last)
+                            else:
+                                Right(DutyCycle)
+                                time.sleep(TurnTime)
                             Continue()
+                            print('continue')
 
                         elif (Mode == "Choose2"):
                             print("Choosing left or right")
@@ -429,17 +444,24 @@ class KeyControl (threading.Thread):
 
                 if (char in ("Ff")):
                     print("Forward")
-                    TargetHeading = LastHeading
+                    # TargetHeading = LastHeading
                     AccelerateForwards(DutyCycle, LastDutyCycle)
                     Running = True
                     Last = char
     #                time.sleep(1)
 
+                if (char in ("Hh")):
+                    print("Heading")
+                    TargetHeading = int(input('Heading 0-360'))
+                    AccelerateForwards(DutyCycle, LastDutyCycle)
+                    Running = True
+                    Last = char
+
                 elif (char in ("Ll")):
                     print("Left")
-                    TargetHeading = LastHeading - 90
-                    if (TargetHeading < 0):
-                        TargetHeading = TargetHeading + 360
+                    TargetHeading = TargetHeadingfn(LastHeading, -90)
+                    # if (TargetHeading < 0):
+                    #    TargetHeading = TargetHeading + 360
                     if (CompassMode is False):
                         Running = False
                         Left(DutyCycle)
@@ -448,20 +470,21 @@ class KeyControl (threading.Thread):
 
                 elif (char in ("kK")):
                     print("Little Left")
-                    TargetHeading = LastHeading - 30
-                    Running = False
-                    Left(DutyCycle)
-                    time.sleep(TurnTime / 3)
-                    if (Last == "S"):
-                        StopMotors()
-                    Continue()
-                    Running = True
+                    TargetHeading = TargetHeadingfn(LastHeading, -30)
+                    if (CompassMode is False):
+                        Running = False
+                        Left(DutyCycle)
+                        time.sleep(TurnTime / 3)
+                        if (Last == "S"):
+                            StopMotors()
+                        Continue()
+                        Running = True
 
                 elif (char in ("Rr")):
                     print("Right")
-                    TargetHeading = LastHeading + 90
-                    if (TargetHeading > 360):
-                        TargetHeading = TargetHeading - 360
+                    TargetHeading = TargetHeadingfn(LastHeading, 90)
+                    # if (TargetHeading > 360):
+                    #    TargetHeading = TargetHeading - 360
                     if (CompassMode is False):
                         Running = False
                         Right(DutyCycle)
@@ -470,14 +493,15 @@ class KeyControl (threading.Thread):
 
                 elif (char in ("eE")):
                     print("Little Right")
-                    TargetHeading = LastHeading + 30
-                    Running = False
-                    Right(DutyCycle)
-                    time.sleep(TurnTime / 3)
-                    if (Last == "S"):
-                        StopMotors()
-                    Continue()
-                    Running = True
+                    TargetHeading = TargetHeadingfn(LastHeading, 30)
+                    if (CompassMode is False):
+                        Running = False
+                        Right(DutyCycle)
+                        time.sleep(TurnTime / 3)
+                        if (Last == "S"):
+                            StopMotors()
+                        Continue()
+                        Running = True
 
                 elif (char in ("Bb")):
                     print("Back")
@@ -521,6 +545,8 @@ class KeyControl (threading.Thread):
                 elif(char in ("Nn")):
                     if (CompassMode):
                         CompassMode = False
+                        AdjLeft = 0
+                        AdjRight = 0
                         print("Compass Mode off")
                     elif (CompassMode is False):
                         CompassMode = True
@@ -581,6 +607,10 @@ class CompassControl (threading.Thread):
 
             LastHeading = Heading()
             Correction = TargetHeading - LastHeading
+            if Correction < -180:
+                Correction += 360
+            if Correction > 180:
+                Correction -= 360
             print("\rLast: %5.1f, Target %5.1f, Corr %5.1f" %
                   (LastHeading, TargetHeading, Correction))
             if (CompassMode):
@@ -595,7 +625,8 @@ class CompassControl (threading.Thread):
                     if(AdjLeft > 0.9):
                         AdjLeft = 0.9
 
-            if (char in ("FfLlRrKkEe1234567890")):
+            if (char in ("FfLlRrKkEeHh1234567890")):
+                print(char)
                 if (Running):
                     if (CompassMode):
                         AR = AdjRight
@@ -603,7 +634,7 @@ class CompassControl (threading.Thread):
                         print("\rAdjRight: %5.3f, AdjLeft: %5.3f" % (AR, AL))
                         Forwards(DutyCycle)
 
-            time.sleep(1)
+            time.sleep(0.5)
 
         print("Exiting " + cctl.name)
 
