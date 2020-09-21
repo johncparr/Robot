@@ -11,7 +11,6 @@ import threading
 import smbus
 import math
 
-
 # Set the GPIO modes
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
@@ -60,7 +59,7 @@ TurnTime = TurnTimes[4] * TurnAdj
 # Setting the duty cycle to 0 means the motors will not turn
 Stop = 0
 
-# Set a flag for compass control
+# Set a flag indicate the robot is moving
 Running = False
 
 # Set char to blank
@@ -69,13 +68,14 @@ char = " "
 # set a string to hold the last action
 Last = "S"
 
-# Stop Flag
+# Stop Flag tells the threads if they should stop
 StopFlag = False
 
-# Obsticle avoidance mode.
+# Obsticle avoidance mode. 3 choices. Default of Simple [0]
 Modes = ["Simple", "Choose2", "Choose3"]
 Mode = Modes[0]
 Choice = 0
+Backingup = False
 
 # Auto is a flag set to true when avoiding an obsticle
 Auto = False
@@ -139,7 +139,7 @@ def Backwards(Power):
     pwmMotorBBackwards.ChangeDutyCycle(Power)
 
 
-# Turn both motors backwards
+# Turn both motors backwards away from an Obsticle
 def Backup(Power, distance):
     while distance <= 40:
         Backwards(Power)
@@ -269,9 +269,6 @@ def TwosComptoInt(N):
 
 
 def Heading():
-    #    for x in range(0, 3):
-    #        Regvalue[x] = read(x)
-    #        print(x, Regvalue[x])
 
     # Read registers 3 to 8 for the XYZ data
     for x in range(3, 9):
@@ -287,9 +284,6 @@ def Heading():
     X = TwosComptoInt(X)
     Y = TwosComptoInt(Y)
     Z = TwosComptoInt(Z)
-
-    # ATan = math.atan(X/Y)
-    # print("\rXYZ", X, Y, Z, X/Y, ATan)
 
     # Calculate the heading in range 0 to 360
     if (Y > 0):
@@ -311,6 +305,7 @@ def Heading():
     return Heading
 
 
+# Set a new heading in the range 0 to 360 after inputing a change
 def TargetHeadingfn(Heading, Change):
     NewHeading = Heading + Change
     if (NewHeading < 0):
@@ -333,7 +328,7 @@ class DistanceControl (threading.Thread):
         global Distance, StopFlag, DutyCycle, OldDutyCycle, TurnTime
         global Mode, Last, Adj, AdjLeft, AdjRight, Choice
         global Distances, Large, Small, char, Auto, CompassMode
-        global TargetHeading, LastHeading
+        global TargetHeading, LastHeading, Backingup
 
         while StopFlag is False:
 
@@ -342,23 +337,23 @@ class DistanceControl (threading.Thread):
             if (Distance == 0):
                 Distance = 1000
                 # print("\rA long way to go")
-            if (Distance <= 40):
+            if (Distance <= 30):
                 if (Distance >= 1):
                     if (Last != "S"):
                         # Stop Compass navigation
-                        char = " "
+                        # char = " "
                         Auto = True
                         # Go back a bit
-                        Backup(20, Distance)
+                        Backingup = True
+                        Backup(40, Distance)
+                        Backingup = False
                         if (Mode == "Simple"):
                             if CompassMode:
-                                TargetHeading = TargetHeadingfn(LastHeading, -90)
-                                print('Hello', Last)
-                            else:
+                                TargetHeading = TargetHeadingfn(LastHeading, 90)
+                            elif CompassMode is False:
                                 Right(DutyCycle)
                                 time.sleep(TurnTime)
                             Continue()
-                            print('continue')
 
                         elif (Mode == "Choose2"):
                             print("Choosing left or right")
@@ -430,7 +425,6 @@ class KeyControl (threading.Thread):
 
         while True:
             char = getch()
-            # print(char)
 
             if (char in ("Pp")):
                 print("Exit")
@@ -460,8 +454,6 @@ class KeyControl (threading.Thread):
                 elif (char in ("Ll")):
                     print("Left")
                     TargetHeading = TargetHeadingfn(LastHeading, -90)
-                    # if (TargetHeading < 0):
-                    #    TargetHeading = TargetHeading + 360
                     if (CompassMode is False):
                         Running = False
                         Left(DutyCycle)
@@ -483,8 +475,6 @@ class KeyControl (threading.Thread):
                 elif (char in ("Rr")):
                     print("Right")
                     TargetHeading = TargetHeadingfn(LastHeading, 90)
-                    # if (TargetHeading > 360):
-                    #    TargetHeading = TargetHeading - 360
                     if (CompassMode is False):
                         Running = False
                         Right(DutyCycle)
@@ -505,7 +495,7 @@ class KeyControl (threading.Thread):
 
                 elif (char in ("Bb")):
                     print("Back")
-                    Running = False
+#                    Running = False
                     AccelerateBackwards(DutyCycle, LastDutyCycle)
                     Last = char
     #                time.sleep(1)
@@ -584,6 +574,7 @@ class CompassControl (threading.Thread):
         global Large, Small, char
         global bus, address, MaxInt, TwosCompAdj, Regvalue
         global TargetHeading, LastHeading, Running, CompassMode
+        global Backingup
 
         bus = smbus.SMBus(1)
         address = 0x1E
@@ -601,7 +592,7 @@ class CompassControl (threading.Thread):
         bus.write_byte_data(address, 2, 0)
 
         # Set a parameter to control how aggressively to correct direction
-        SteerFactor = 20
+        SteerFactor = 40
 
         while StopFlag is False:
 
@@ -625,10 +616,11 @@ class CompassControl (threading.Thread):
                     if(AdjLeft > 0.9):
                         AdjLeft = 0.9
 
+            print("char, Running, CompassMode")
+            print(char, Running, CompassMode)
             if (char in ("FfLlRrKkEeHh1234567890")):
-                print(char)
                 if (Running):
-                    if (CompassMode):
+                    if (CompassMode and not Backingup):
                         AR = AdjRight
                         AL = AdjLeft
                         print("\rAdjRight: %5.3f, AdjLeft: %5.3f" % (AR, AL))
