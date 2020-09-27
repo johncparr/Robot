@@ -115,6 +115,12 @@ TargetHeading = 0.0
 LastHeading = 0.0
 Correction = 0.0
 
+# Compass correction data
+Compass = []
+
+with open('CompassCorr.txt') as reader:
+    for line in reader:
+        Compass.append(line.strip('\n'))
 
 # Subroutines
 
@@ -133,10 +139,7 @@ def Forwards(Power):
     pwmMotorABackwards.ChangeDutyCycle(Stop)
     pwmMotorBForwards.ChangeDutyCycle(Power * (1 - AdjLeft) * (1 - Adj))
     pwmMotorBBackwards.ChangeDutyCycle(Stop)
-    # a = 1 - AdjRight
-    # b = 1 - AdjLeft
-    # print("\rRight: %5.1f, Left: %5.1f" % (Power * a, Power * b)
-    print("\rRight: %5.1f, Left: %5.1f" % (AdjRight, AdjLeft))
+    # print("\rRight: %5.1f, Left: %5.1f" % (AdjRight, AdjLeft))
 
 
 # Turn both motors backwards
@@ -148,10 +151,11 @@ def Backwards(Power):
 
 
 # Turn both motors backwards away from an Obsticle
-def Backup(Power, distance):
-    while distance <= 40:
+def Backup(Power):
+    global Distance
+    while Distance <= 40:
         Backwards(Power)
-        distance = Measure()
+        # Distance = Measure()
     StopMotors()
 
 
@@ -168,7 +172,8 @@ def CRight(LH, TH):
     Right(DutyCycle)
     while LH < TH:
         LH = Heading()
-    StopMotors()
+        time.sleep(0.1)
+    # StopMotors()
 
 
 # Turn Left
@@ -190,13 +195,13 @@ def Circle(Power, Size):
 # Accelerate Forwards
 def AccelerateForwards(NewPower, OldPower):
     Step = (NewPower - OldPower) / SpeedSteps
-    # print(OldPower + Step)
+
     Forwards(OldPower + Step)
     time.sleep(0.25)
-    # print(NewPower - Step)
+
     Forwards(NewPower - Step)
     time.sleep(0.25)
-    # print(NewPower)
+
     Forwards(NewPower)
 
 
@@ -259,7 +264,7 @@ def Measure():
     # see the echo quickly enough, so it has to detect that
     # problem and say what has happened
         if StopTime - StartTime >= 0.04:
-            # print("Hold on there! You're too close for me to see.")
+            print("Hold on there! You're too close for me to see.")
             StopTime = StartTime
             break
 
@@ -272,8 +277,6 @@ def Measure():
 
     # That was the distance there and back so halve the value
     distance = distance / 2
-
-    # print("\rDistance: %.1f cm" % distance)
 
     return distance
 
@@ -289,7 +292,6 @@ def Heading():
     # Read registers 3 to 8 for the XYZ data
     for x in range(3, 9):
         Regvalue[x] = bus.read_byte_data(address, x)
-        # print(x, Regvalue[x])
 
     # join the two 8 bit numbers to make a 16 bit
     X = (Regvalue[3] << 8) + Regvalue[4]
@@ -316,14 +318,20 @@ def Heading():
     # Calculate signed heading
     # Heading = math.atan(X/Y) * 180 / math.pi
     Heading = Heading360
-    # print("\rHeading ", Heading, Heading360)
 
     return Heading
 
 
 # Set a new heading in the range 0 to 360 after inputing a change
 def TargetHeadfn(Heading, Change):
-    NewHeading = Heading + Change
+    H = int(Heading)
+    Hnew = H + Change
+    if (Hnew < 0):
+        Hnew += 360
+    if (Hnew > 360):
+        Hnew -= 360
+    SensorChange = float(Compass[Hnew]) - float(Compass[H])
+    NewHeading = Heading + SensorChange
     if (NewHeading < 0):
         NewHeading += 360
     if (NewHeading > 360):
@@ -363,76 +371,7 @@ class DistanceControl (threading.Thread):
             # In a big open space a zero distance is returned
             if (Distance == 0):
                 Distance = 1000
-                # print("\rA long way to go")
-            if (Distance <= 30):
-                if (Distance >= 1):
-                    if (Last != "S"):
-                        # Stop Compass navigation
-                        Running = False
-                        # char = " "
-                        Auto = True
-                        # Go back a bit
-                        Backingup = True
-                        Backup(40, Distance)
-                        Backingup = False
-                        if (Mode == "Simple"):
-                            if CompassMode:
-                                TargetHeading = TargetHeadfn(LastHeading, 90)
-                                CRight(LastHeading, TargetHeading)
-                            elif CompassMode is False:
-                                Right(DutyCycle)
-                                time.sleep(TurnTime)
-                            Running = True
-                            Continue()
-
-                        elif (Mode == "Choose2"):
-                            print("Choosing left or right")
-                            if (CompassMode):
-                                pass
-
-                            elif CompassMode is False:
-                                Right(DutyCycle)
-                                time.sleep(TurnTime)
-                                StopMotors()
-                                Distances[2] = Measure()
-                                Right(DutyCycle)
-                                time.sleep(TurnTime)
-                                StopMotors()
-                                Right(DutyCycle)
-                                time.sleep(TurnTime)
-                                StopMotors()
-                                Distances[0] = Measure()
-                                Choice = max(Distances[0], Distances[2])
-                                # print("Choice: %.1f cm" % Choice)
-                                if (Choice == Distances[2]):
-                                    Left(DutyCycle)
-                                    time.sleep(TurnTime * 2)
-                                Continue()
-
-                        elif (Mode == "Choose3"):
-                            print("Choosing left, right or turn round")
-                            Right(DutyCycle)
-                            time.sleep(TurnTime)
-                            StopMotors()
-                            Distances[2] = Measure()
-                            Right(DutyCycle)
-                            time.sleep(TurnTime)
-                            StopMotors()
-                            Distances[1] = Measure()
-                            Right(DutyCycle)
-                            time.sleep(TurnTime)
-                            StopMotors()
-                            Distances[0] = Measure()
-                            Choice = max(Distances)
-                            # print("Choice: %.1f cm" % Choice)
-                            if (Choice == Distances[2]):
-                                Left(DutyCycle)
-                                time.sleep(TurnTime * 2)
-                            elif (Choice == Distances[1]):
-                                Left(DutyCycle)
-                                time.sleep(TurnTime)
-                            Continue()
-                        Auto = False
+                print("\rA long way to go")
 
             time.sleep(0.1)
 
@@ -466,6 +405,14 @@ class KeyControl (threading.Thread):
                 StopFlag = True
                 print("Exiting " + kctl.name)
                 exit(0)
+
+            if (char in ("Ss")):
+                print("Stop")
+                TargetHeading = LastHeading
+                Running = False
+                StopMotors()
+                Last = "S"
+                LastDutyCycle = 0
 
             if (Auto is False):
 
@@ -534,14 +481,6 @@ class KeyControl (threading.Thread):
     #                time.sleep(1)
     #                StopMotors()
 
-                elif (char in ("Ss")):
-                    print("Stop")
-                    TargetHeading = LastHeading
-                    Running = False
-                    StopMotors()
-                    Last = "S"
-                    LastDutyCycle = 0
-
                 elif (char == "C"):
                     print("Big Circle")
                     Running = False
@@ -582,7 +521,6 @@ class KeyControl (threading.Thread):
                     if (char == "0"):
                         char = "10"
                     DutyCycle = 10 * int(char)
-                    # print("Power ", LastDutyCycle, " to ", DutyCycle)
                     TurnTime = TurnTimes[int(char)] * TurnAdj
                     print("Turn time", TurnTime)
 
@@ -631,22 +569,19 @@ class CompassControl (threading.Thread):
             print("\rLast: %5.1f, Target %5.1f, Corr %5.1f" %
                   (LastHeading, TargetHeading, Correction))
 
-            # print("char, Running, CompassMode")
-            # print(char, Running, CompassMode)
-
             time.sleep(0.5)
 
         print("Exiting " + cctl.name)
 
 
 class Drive (threading.Thread):
-    def __init__(cctl, threadID, name, counter):
-        threading.Thread.__init__(cctl)
-        cctl.threadID = threadID
-        cctl.name = name
-        cctl.counter = counter
+    def __init__(Dctl, threadID, name, counter):
+        threading.Thread.__init__(Dctl)
+        Dctl.threadID = threadID
+        Dctl.name = name
+        Dctl.counter = counter
 
-    def run(cctl):
+    def run(Dctl):
 
         global Adj, AdjLeft, AdjRight, Auto, Backingup, char, Choice
         global CompassMode, Correction, Distance, Distances, DutyCycle, Large
@@ -673,12 +608,81 @@ class Drive (threading.Thread):
 
             # if (char in ("FfLlRrKkEeHh1234567890")):
                 if (Running):
-                    AR = AdjRight
-                    AL = AdjLeft
-                    print("\rAdjRight: %5.3f, AdjLeft: %5.3f" % (AR, AL))
+                    # AR = AdjRight
+                    # AL = AdjLeft
+                    # print("\rAdjRight: %5.3f, AdjLeft: %5.3f" % (AR, AL))
                     Forwards(DutyCycle)
 
-        print("Exiting " + cctl.name)
+            if (Distance <= 30):
+                if (Distance >= 1):
+                    if (Last != "S"):
+                        # Stop Compass navigation
+                        Running = False
+                        Auto = True
+
+                        # Go back a bit
+                        Backup(40)
+
+                        if (Mode == "Simple"):
+                            if CompassMode:
+                                TargetHeading = TargetHeadfn(LastHeading, 90)
+                                CRight(LastHeading, TargetHeading)
+                            elif CompassMode is False:
+                                Right(DutyCycle)
+                                time.sleep(TurnTime)
+                            Running = True
+                            Continue()
+
+                        elif (Mode == "Choose2"):
+                            print("Choosing left or right")
+                            if (CompassMode):
+                                pass
+
+                            elif CompassMode is False:
+                                Right(DutyCycle)
+                                time.sleep(TurnTime)
+                                StopMotors()
+                                Distances[2] = Measure()
+                                Right(DutyCycle)
+                                time.sleep(TurnTime)
+                                StopMotors()
+                                Right(DutyCycle)
+                                time.sleep(TurnTime)
+                                StopMotors()
+                                Distances[0] = Measure()
+                                Choice = max(Distances[0], Distances[2])
+                                # print("Choice: %.1f cm" % Choice)
+                                if (Choice == Distances[2]):
+                                    Left(DutyCycle)
+                                    time.sleep(TurnTime * 2)
+                                Continue()
+
+                        elif (Mode == "Choose3"):
+                            print("Choosing left, right or turn round")
+                            Right(DutyCycle)
+                            time.sleep(TurnTime)
+                            StopMotors()
+                            Distances[2] = Measure()
+                            Right(DutyCycle)
+                            time.sleep(TurnTime)
+                            StopMotors()
+                            Distances[1] = Measure()
+                            Right(DutyCycle)
+                            time.sleep(TurnTime)
+                            StopMotors()
+                            Distances[0] = Measure()
+                            Choice = max(Distances)
+                            # print("Choice: %.1f cm" % Choice)
+                            if (Choice == Distances[2]):
+                                Left(DutyCycle)
+                                time.sleep(TurnTime * 2)
+                            elif (Choice == Distances[1]):
+                                Left(DutyCycle)
+                                time.sleep(TurnTime)
+                            Continue()
+                        Auto = False
+
+        print("Exiting " + Dctl.name)
 
 
 # Create Threads
