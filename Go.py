@@ -11,6 +11,7 @@ import threading
 import smbus
 import math
 
+# GPIO setup #################################################################
 # Set the GPIO modes
 GPIO.setmode(GPIO.BCM)
 GPIO.setwarnings(False)
@@ -21,6 +22,30 @@ pinMotorABackwards = 10
 pinMotorBForwards = 7
 pinMotorBBackwards = 8
 
+# Set the GPIO Pin mode
+GPIO.setup(pinMotorAForwards, GPIO.OUT)
+GPIO.setup(pinMotorABackwards, GPIO.OUT)
+GPIO.setup(pinMotorBForwards, GPIO.OUT)
+GPIO.setup(pinMotorBBackwards, GPIO.OUT)
+
+# How many times to turn the pin on and off each second
+Frequency = 20
+
+# Set the GPIO to software PWM at 'Frequency' Hertz
+pwmMotorAForwards = GPIO.PWM(pinMotorAForwards, Frequency)
+pwmMotorABackwards = GPIO.PWM(pinMotorABackwards, Frequency)
+pwmMotorBForwards = GPIO.PWM(pinMotorBForwards, Frequency)
+pwmMotorBBackwards = GPIO.PWM(pinMotorBBackwards, Frequency)
+
+# Setting the duty cycle to 0 means the motors will not turn
+Stop = 0
+
+# Start the software PWM with a duty cycle of 0 (i.e. not moving)
+pwmMotorAForwards.start(Stop)
+pwmMotorABackwards.start(Stop)
+pwmMotorBForwards.start(Stop)
+pwmMotorBBackwards.start(Stop)
+
 # Define GPIO pins to use for distance measurement on the Pi
 pinTrigger = 17
 pinEcho = 18
@@ -29,43 +54,41 @@ pinEcho = 18
 GPIO.setup(pinTrigger, GPIO.OUT)  # Trigger
 GPIO.setup(pinEcho, GPIO.IN)  # Echo
 
-# Variables
-Distance = 0
-Distances = [0, 0, 0]
 
-# How many times to turn the pin on and off each second
-Frequency = 20
+# Variables ##################################################################
+# Distance is the measured distance to an Obsticle
+Distance = 0
+
+# Distances contains 3 distance measurements
+Distances = [0, 0, 0]
 
 # How long the pin stays on each cycle, as a percent (here, it's 40%)
 DutyCycle = 40.0
 
-# Last Duty Cycle used to allow smooth transitions in speed
+# Last Duty Cycle used to allow smooth transitions in 3 SpeedSteps
 LastDutyCycle = 0.0
 SpeedSteps = 3
 
-# Adj balances the forward drive
+# Adj balances the forward drive to correct for drift left or right
 Adj = 0.00
 
 # AdjLeft and AdjRight are used in the compass mode to steer
-AdjLeft = 0
-AdjRight = 0
+AdjLeft = 0.0
+AdjRight = 0.0
 
 # Time to turn 90 degrees
-# TurnTimeRef = 0.7
+# TurnAdj scales the entire Turntimes list for surface or battery conditions
 TurnAdj = 1.4
 TurnTimes = [0.0, 8.0, 1.20, 0.75, 0.5, 0.40, 0.38, 0.37, 0.35, 0.335, 0.3]
 TurnTime = TurnTimes[4] * TurnAdj
 
-# Setting the duty cycle to 0 means the motors will not turn
-Stop = 0
-
 # Set a flag indicate the robot is moving
 Running = False
 
-# Set char to blank
+# Set char to blank. Holds the last key pressed
 char = " "
 
-# set a string to hold the last action
+# set a string to hold the last action. Default to S ie stopped
 Last = "S"
 
 # Stop Flag tells the threads if they should stop
@@ -75,12 +98,12 @@ StopFlag = False
 Modes = ["Simple", "Choose2", "Choose3"]
 Mode = Modes[0]
 Choice = 0
-Backingup = False
+Backingup = False  # May not be needed now
 
 # Auto is a flag set to true when avoiding an obsticle
 Auto = False
 
-# Compass Mode
+# Compass Mode, the alternative to control by keys alone.
 CompassMode = False
 
 # Circle Sizes
@@ -89,24 +112,9 @@ Large = 0.6
 
 # Set initial TargetHeading
 TargetHeading = 0.0
+LastHeading = 0.0
+Correction = 0.0
 
-# Set the GPIO Pin mode
-GPIO.setup(pinMotorAForwards, GPIO.OUT)
-GPIO.setup(pinMotorABackwards, GPIO.OUT)
-GPIO.setup(pinMotorBForwards, GPIO.OUT)
-GPIO.setup(pinMotorBBackwards, GPIO.OUT)
-
-# Set the GPIO to software PWM at 'Frequency' Hertz
-pwmMotorAForwards = GPIO.PWM(pinMotorAForwards, Frequency)
-pwmMotorABackwards = GPIO.PWM(pinMotorABackwards, Frequency)
-pwmMotorBForwards = GPIO.PWM(pinMotorBForwards, Frequency)
-pwmMotorBBackwards = GPIO.PWM(pinMotorBBackwards, Frequency)
-
-# Start the software PWM with a duty cycle of 0 (i.e. not moving)
-pwmMotorAForwards.start(Stop)
-pwmMotorABackwards.start(Stop)
-pwmMotorBForwards.start(Stop)
-pwmMotorBBackwards.start(Stop)
 
 # Subroutines
 
@@ -153,6 +161,14 @@ def Right(Power):
     pwmMotorABackwards.ChangeDutyCycle(Power)
     pwmMotorBForwards.ChangeDutyCycle(Power)
     pwmMotorBBackwards.ChangeDutyCycle(Stop)
+
+
+# Turn Right under compass Control
+def CRight(LH, TH):
+    Right(DutyCycle)
+    while LH < TH:
+        LH = Heading()
+    StopMotors()
 
 
 # Turn Left
@@ -306,13 +322,23 @@ def Heading():
 
 
 # Set a new heading in the range 0 to 360 after inputing a change
-def TargetHeadingfn(Heading, Change):
+def TargetHeadfn(Heading, Change):
     NewHeading = Heading + Change
     if (NewHeading < 0):
         NewHeading += 360
     if (NewHeading > 360):
         NewHeading -= 360
     return NewHeading
+
+
+# Calculate Correction in range -180to +180
+def Correctionfn():
+    Correction = TargetHeading - LastHeading
+    if Correction < -180:
+        Correction += 360
+    if Correction > 180:
+        Correction -= 360
+    return Correction
 
 
 # Distance Control Thread
@@ -325,10 +351,11 @@ class DistanceControl (threading.Thread):
 
     def run(dctl):
 
-        global Distance, StopFlag, DutyCycle, OldDutyCycle, TurnTime
-        global Mode, Last, Adj, AdjLeft, AdjRight, Choice
-        global Distances, Large, Small, char, Auto, CompassMode
-        global TargetHeading, LastHeading, Backingup
+        global Adj, AdjLeft, AdjRight, Auto, Backingup, char, Choice
+        global CompassMode, Correction, Distance, Distances, DutyCycle, Large
+        global Last, LastDutyCycle, LastHeading, Mode, Modes, Running, Small
+        global SpeedSteps, Stop, StopFlag, TargetHeading, TurnAdj, TurnTime
+        global TurnTimes
 
         while StopFlag is False:
 
@@ -341,6 +368,7 @@ class DistanceControl (threading.Thread):
                 if (Distance >= 1):
                     if (Last != "S"):
                         # Stop Compass navigation
+                        Running = False
                         # char = " "
                         Auto = True
                         # Go back a bit
@@ -349,32 +377,37 @@ class DistanceControl (threading.Thread):
                         Backingup = False
                         if (Mode == "Simple"):
                             if CompassMode:
-                                TargetHeading = TargetHeadingfn(LastHeading, 90)
+                                TargetHeading = TargetHeadfn(LastHeading, 90)
+                                CRight(LastHeading, TargetHeading)
                             elif CompassMode is False:
                                 Right(DutyCycle)
                                 time.sleep(TurnTime)
+                            Running = True
                             Continue()
 
                         elif (Mode == "Choose2"):
                             print("Choosing left or right")
-                            Right(DutyCycle)
-                            time.sleep(TurnTime)
-                            StopMotors()
-                            Distances[2] = Measure()
-                            Right(DutyCycle)
-                            time.sleep(TurnTime)
-                            StopMotors()
-#                            Distances[1] = Measure()
-                            Right(DutyCycle)
-                            time.sleep(TurnTime)
-                            StopMotors()
-                            Distances[0] = Measure()
-                            Choice = max(Distances[0], Distances[2])
-                            # print("Choice: %.1f cm" % Choice)
-                            if (Choice == Distances[2]):
-                                Left(DutyCycle)
-                                time.sleep(TurnTime * 2)
-                            Continue()
+                            if (CompassMode):
+                                pass
+
+                            elif CompassMode is False:
+                                Right(DutyCycle)
+                                time.sleep(TurnTime)
+                                StopMotors()
+                                Distances[2] = Measure()
+                                Right(DutyCycle)
+                                time.sleep(TurnTime)
+                                StopMotors()
+                                Right(DutyCycle)
+                                time.sleep(TurnTime)
+                                StopMotors()
+                                Distances[0] = Measure()
+                                Choice = max(Distances[0], Distances[2])
+                                # print("Choice: %.1f cm" % Choice)
+                                if (Choice == Distances[2]):
+                                    Left(DutyCycle)
+                                    time.sleep(TurnTime * 2)
+                                Continue()
 
                         elif (Mode == "Choose3"):
                             print("Choosing left, right or turn round")
@@ -417,11 +450,11 @@ class KeyControl (threading.Thread):
     def run(kctl):
 
         button_delay = 0.2
-        global DutyCycle, TurnTime, TurnTimes, StopFlag
-        global Last, Adj, AdjLeft, AdjRight, LastDutyCycle
-        global SpeedSteps, Mode, Modes, Auto
-        global Large, Small, char
-        global TargetHeading, LastHeading, Running, CompassMode
+        global Adj, AdjLeft, AdjRight, Auto, Backingup, char, Choice
+        global CompassMode, Correction, Distance, Distances, DutyCycle, Large
+        global Last, LastDutyCycle, LastHeading, Mode, Modes, Running, Small
+        global SpeedSteps, Stop, StopFlag, TargetHeading, TurnAdj, TurnTime
+        global TurnTimes
 
         while True:
             char = getch()
@@ -453,7 +486,7 @@ class KeyControl (threading.Thread):
 
                 elif (char in ("Ll")):
                     print("Left")
-                    TargetHeading = TargetHeadingfn(LastHeading, -90)
+                    TargetHeading = TargetHeadfn(LastHeading, -90)
                     if (CompassMode is False):
                         Running = False
                         Left(DutyCycle)
@@ -462,7 +495,7 @@ class KeyControl (threading.Thread):
 
                 elif (char in ("kK")):
                     print("Little Left")
-                    TargetHeading = TargetHeadingfn(LastHeading, -30)
+                    TargetHeading = TargetHeadfn(LastHeading, -30)
                     if (CompassMode is False):
                         Running = False
                         Left(DutyCycle)
@@ -474,7 +507,7 @@ class KeyControl (threading.Thread):
 
                 elif (char in ("Rr")):
                     print("Right")
-                    TargetHeading = TargetHeadingfn(LastHeading, 90)
+                    TargetHeading = TargetHeadfn(LastHeading, 90)
                     if (CompassMode is False):
                         Running = False
                         Right(DutyCycle)
@@ -483,7 +516,7 @@ class KeyControl (threading.Thread):
 
                 elif (char in ("eE")):
                     print("Little Right")
-                    TargetHeading = TargetHeadingfn(LastHeading, 30)
+                    TargetHeading = TargetHeadfn(LastHeading, 30)
                     if (CompassMode is False):
                         Running = False
                         Right(DutyCycle)
@@ -568,13 +601,13 @@ class CompassControl (threading.Thread):
 
     def run(cctl):
 
-        global DutyCycle, TurnTime, TurnTimes, StopFlag
-        global Last, Adj, AdjLeft, AdjRight, LastDutyCycle
-        global SpeedSteps, Mode, Modes
-        global Large, Small, char
+        global Adj, AdjLeft, AdjRight, Auto, Backingup, char, Choice
+        global CompassMode, Correction, Distance, Distances, DutyCycle, Large
+        global Last, LastDutyCycle, LastHeading, Mode, Modes, Running, Small
+        global SpeedSteps, Stop, StopFlag, TargetHeading, TurnAdj, TurnTime
+        global TurnTimes
+
         global bus, address, MaxInt, TwosCompAdj, Regvalue
-        global TargetHeading, LastHeading, Running, CompassMode
-        global Backingup
 
         bus = smbus.SMBus(1)
         address = 0x1E
@@ -591,19 +624,41 @@ class CompassControl (threading.Thread):
         # Sets HMC5883L Compass continuous mode. (Register 2, Mode 0)
         bus.write_byte_data(address, 2, 0)
 
+        while StopFlag is False:
+
+            LastHeading = Heading()
+            Correction = Correctionfn()
+            print("\rLast: %5.1f, Target %5.1f, Corr %5.1f" %
+                  (LastHeading, TargetHeading, Correction))
+
+            # print("char, Running, CompassMode")
+            # print(char, Running, CompassMode)
+
+            time.sleep(0.5)
+
+        print("Exiting " + cctl.name)
+
+
+class Drive (threading.Thread):
+    def __init__(cctl, threadID, name, counter):
+        threading.Thread.__init__(cctl)
+        cctl.threadID = threadID
+        cctl.name = name
+        cctl.counter = counter
+
+    def run(cctl):
+
+        global Adj, AdjLeft, AdjRight, Auto, Backingup, char, Choice
+        global CompassMode, Correction, Distance, Distances, DutyCycle, Large
+        global Last, LastDutyCycle, LastHeading, Mode, Modes, Running, Small
+        global SpeedSteps, Stop, StopFlag, TargetHeading, TurnAdj, TurnTime
+        global TurnTimes
+
         # Set a parameter to control how aggressively to correct direction
         SteerFactor = 40
 
         while StopFlag is False:
 
-            LastHeading = Heading()
-            Correction = TargetHeading - LastHeading
-            if Correction < -180:
-                Correction += 360
-            if Correction > 180:
-                Correction -= 360
-            print("\rLast: %5.1f, Target %5.1f, Corr %5.1f" %
-                  (LastHeading, TargetHeading, Correction))
             if (CompassMode):
                 if(Correction > 0):
                     AdjLeft = 0
@@ -616,17 +671,12 @@ class CompassControl (threading.Thread):
                     if(AdjLeft > 0.9):
                         AdjLeft = 0.9
 
-            print("char, Running, CompassMode")
-            print(char, Running, CompassMode)
-            if (char in ("FfLlRrKkEeHh1234567890")):
+            # if (char in ("FfLlRrKkEeHh1234567890")):
                 if (Running):
-                    if (CompassMode and not Backingup):
-                        AR = AdjRight
-                        AL = AdjLeft
-                        print("\rAdjRight: %5.3f, AdjLeft: %5.3f" % (AR, AL))
-                        Forwards(DutyCycle)
-
-            time.sleep(0.5)
+                    AR = AdjRight
+                    AL = AdjLeft
+                    print("\rAdjRight: %5.3f, AdjLeft: %5.3f" % (AR, AL))
+                    Forwards(DutyCycle)
 
         print("Exiting " + cctl.name)
 
@@ -635,13 +685,21 @@ class CompassControl (threading.Thread):
 thread1 = KeyControl(1, "Key Control Thread", 1)
 thread2 = DistanceControl(2, "Distance Control Thread", 1)
 thread3 = CompassControl(3, "Compass Control Thread", 1)
+thread4 = Drive(4, "Drive Thread", 1)
 
 # Start the Threads
 thread1.start()
 thread2.start()
 thread3.start()
+thread4.start()
+
+# Join the threads
 thread1.join()
 thread2.join()
 thread3.join()
+thread4.join()
+
+# Cleanup the GPIO
 GPIO.cleanup()
+
 print("Exiting Main Thread")
